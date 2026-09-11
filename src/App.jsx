@@ -51,6 +51,11 @@ function img(seed) {
   return `https://picsum.photos/seed/${seed}/600/600`;
 }
 
+// Returns a product's real photo if the admin added one, otherwise a placeholder.
+function productImg(p) {
+  return p && p.image ? p.image : img(p ? p.sku : "placeholder");
+}
+
 const SEED_PRODUCTS = [
   { id: "p1", sku: "JW-001", brand: "Dreamy Finds", category: "Jewelry", nameEn: "Pearl Drop Earrings", nameAr: "أقراط لؤلؤ", price: 14, sale: 11, stock: 20, featured: true, bestSeller: true, isNew: false, desc: "Dainty freshwater pearl drop earrings, gold-plated hooks.", specs: "Gold-plated · Freshwater pearl · Hypoallergenic" },
   { id: "p2", sku: "JW-014", brand: "Dreamy Finds", category: "Jewelry", nameEn: "Layered Chain Necklace", nameAr: "قلادة طبقات", price: 18, sale: null, stock: 15, featured: true, bestSeller: false, isNew: true, desc: "Delicate layered chain necklace with a tiny heart charm.", specs: "18K gold-plated · Adjustable length" },
@@ -224,51 +229,37 @@ export default function App() {
   const isAr = lang === "ar";
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        let p;
-        try { p = await window.storage.get("df_products", true); } catch { p = null; }
-        if (!p) {
-          await window.storage.set("df_products", JSON.stringify(SEED_PRODUCTS), true);
-          if (!cancelled) setProducts(SEED_PRODUCTS);
-        } else if (!cancelled) {
-          setProducts(JSON.parse(p.value));
-        }
+    try {
+      const p = localStorage.getItem("df_products");
+      setProducts(p ? JSON.parse(p) : SEED_PRODUCTS);
+      if (!p) localStorage.setItem("df_products", JSON.stringify(SEED_PRODUCTS));
 
-        let s;
-        try { s = await window.storage.get("df_settings", true); } catch { s = null; }
-        if (!s) {
-          await window.storage.set("df_settings", JSON.stringify(DEFAULT_SETTINGS), true);
-          if (!cancelled) setSettings(DEFAULT_SETTINGS);
-        } else if (!cancelled) {
-          setSettings(JSON.parse(s.value));
-        }
+      const s = localStorage.getItem("df_settings");
+      setSettings(s ? JSON.parse(s) : DEFAULT_SETTINGS);
+      if (!s) localStorage.setItem("df_settings", JSON.stringify(DEFAULT_SETTINGS));
 
-        let c;
-        try { c = await window.storage.get("df_cart", false); } catch { c = null; }
-        if (c && !cancelled) setCart(JSON.parse(c.value));
-      } catch (e) {
-        console.error("Storage load failed", e);
-        if (!cancelled) { setLoadError(true); setProducts(SEED_PRODUCTS); }
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-    return () => { cancelled = true; };
+      const c = localStorage.getItem("df_cart");
+      if (c) setCart(JSON.parse(c));
+    } catch (e) {
+      console.error("Storage load failed", e);
+      setLoadError(true);
+      setProducts(SEED_PRODUCTS);
+    } finally {
+      setLoaded(true);
+    }
   }, []);
 
-  const saveProducts = useCallback(async (next) => {
+  const saveProducts = useCallback((next) => {
     setProducts(next);
-    try { await window.storage.set("df_products", JSON.stringify(next), true); } catch (e) { console.error(e); }
+    try { localStorage.setItem("df_products", JSON.stringify(next)); } catch (e) { console.error(e); }
   }, []);
-  const saveSettings = useCallback(async (next) => {
+  const saveSettings = useCallback((next) => {
     setSettings(next);
-    try { await window.storage.set("df_settings", JSON.stringify(next), true); } catch (e) { console.error(e); }
+    try { localStorage.setItem("df_settings", JSON.stringify(next)); } catch (e) { console.error(e); }
   }, []);
-  const saveCart = useCallback(async (next) => {
+  const saveCart = useCallback((next) => {
     setCart(next);
-    try { await window.storage.set("df_cart", JSON.stringify(next), false); } catch (e) { console.error(e); }
+    try { localStorage.setItem("df_cart", JSON.stringify(next)); } catch (e) { console.error(e); }
   }, []);
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 1800); }
@@ -388,6 +379,7 @@ export default function App() {
         <AdminPanel t={t} isAr={isAr} products={products} settings={settings} onSaveProducts={saveProducts} onSaveSettings={saveSettings} onExit={() => setView("store")} categories={CATEGORIES} />
       ) : (
         <>
+          <AnnouncementBar isAr={isAr} />
           <TopBar t={t} settings={settings} lang={lang} setLang={setLang} />
           <Header
             t={t} isAr={isAr} query={query} setQuery={setQuery} cartCount={cartCount}
@@ -457,6 +449,14 @@ export default function App() {
 
 /* ---------------- Sub components ---------------- */
 
+function AnnouncementBar({ isAr }) {
+  return (
+    <div className="bg-[#3A2E30] text-white text-center text-xs font-medium body-font py-2 px-4 tracking-wide">
+      {isAr ? "توصيل مجاني للطلبات فوق 50$" : "Free delivery on orders above $50"}
+    </div>
+  );
+}
+
 function TopBar({ t, settings, lang, setLang }) {
   return (
     <div className="bg-[#C97B84] text-white text-xs body-font">
@@ -482,10 +482,10 @@ function Header({ t, isAr, query, setQuery, cartCount, onCartClick, menuOpen, se
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-4">
         <button className="lg:hidden" onClick={() => setMenuOpen((v) => !v)}>{menuOpen ? <X size={24} /> : <Menu size={24} />}</button>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="bg-[#C97B84] w-10 h-10 rounded-full flex items-center justify-center text-white"><Gift size={18} /></div>
-          <div className="leading-none">
+          <img src="/logo.png" alt="Dreamy Finds By Celia" className="w-11 h-11 rounded-full object-cover" onError={(e) => { e.target.style.display = "none"; }} />
+          <div className="leading-none hidden sm:block">
             <div className="font-bold text-lg heading-font">Dreamy Finds</div>
-            <div className="text-[10px] text-[#8A5A63] body-font tracking-wide">BY CEILIA</div>
+            <div className="text-[10px] text-[#8A5A63] body-font tracking-wide">BY CELIA</div>
           </div>
         </div>
 
@@ -578,15 +578,23 @@ function ProductRow({ title, items, isAr, t, onOpen, onAdd, accent }) {
 }
 
 function ProductCard({ p, isAr, t, onOpen, onAdd, compact }) {
+  const [wished, setWished] = useState(false);
   const price = p.sale ?? p.price;
   const name = isAr ? p.nameAr : p.nameEn;
   return (
     <div className="bg-white border border-[#F1DDD8] rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
       <button onClick={onOpen} className="block w-full text-left">
         <div className="relative aspect-square bg-[#FBEFEA]">
-          <img src={img(p.sku)} alt={name} className="w-full h-full object-cover" />
+          <img src={productImg(p)} alt={name} className="w-full h-full object-cover" />
+          <button
+            onClick={(e) => { e.stopPropagation(); setWished((w) => !w); }}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm"
+            aria-label="wishlist"
+          >
+            <Heart size={14} className={wished ? "fill-[#C97B84] text-[#C97B84]" : "text-[#C9A0A6]"} />
+          </button>
           {p.sale && <span className="absolute top-2 left-2 bg-[#C97B84] text-white text-[11px] font-bold px-2 py-0.5 rounded-full body-font">SALE</span>}
-          {p.isNew && <span className="absolute top-2 right-2 bg-[#C9A86A] text-white text-[11px] font-bold px-2 py-0.5 rounded-full body-font">{isAr ? "جديد" : "NEW"}</span>}
+          {p.isNew && <span className="absolute bottom-2 left-2 bg-[#C9A86A] text-white text-[11px] font-bold px-2 py-0.5 rounded-full body-font">{isAr ? "جديد" : "NEW"}</span>}
           {p.stock === 0 && <div className="absolute inset-0 bg-white/70 flex items-center justify-center text-sm font-semibold body-font">{t.outStock}</div>}
         </div>
         <div className="p-3">
@@ -643,7 +651,7 @@ function ProductModal({ product, t, isAr, onClose, onAdd, onWhatsapp }) {
           <button onClick={onClose}><X size={22} /></button>
         </div>
         <div className="grid sm:grid-cols-2 gap-6 p-4 sm:p-6">
-          <img src={img(product.sku)} alt={name} className="w-full aspect-square object-cover rounded-2xl bg-[#FBEFEA]" />
+          <img src={productImg(product)} alt={name} className="w-full aspect-square object-cover rounded-2xl bg-[#FBEFEA]" />
           <div className="body-font">
             <div className="text-xs text-[#B98A90]">{product.category}</div>
             <h2 className="text-2xl font-semibold mt-1 mb-2 heading-font">{name}</h2>
@@ -691,7 +699,7 @@ function CartPanel({ t, isAr, items, setQty, removeFromCart, clearCart, subtotal
               const price = it.sale ?? it.price;
               return (
                 <div key={it.id} className="flex gap-3 border-b pb-4">
-                  <img src={img(it.sku)} alt={name} className="w-16 h-16 object-cover rounded-xl bg-[#FBEFEA] shrink-0" />
+                  <img src={productImg(it)} alt={name} className="w-16 h-16 object-cover rounded-xl bg-[#FBEFEA] shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold line-clamp-1">{name}</div>
                     <div className="text-xs text-[#C9A0A6]">{it.sku}</div>
@@ -908,7 +916,7 @@ function AdminPanel({ t, isAr, products, settings, onSaveProducts, onSaveSetting
                 <tbody>
                   {products.map((p) => (
                     <tr key={p.id} className="border-t">
-                      <td className="p-3"><img src={img(p.sku)} className="w-10 h-10 object-cover rounded-lg" alt="" /></td>
+                      <td className="p-3"><img src={productImg(p)} className="w-10 h-10 object-cover rounded-lg" alt="" /></td>
                       <td className="p-3 font-medium">{p.nameEn}</td>
                       <td className="p-3 text-[#8A5A63]">{p.sku}</td>
                       <td className="p-3 text-[#8A5A63]">{p.category}</td>
@@ -945,13 +953,25 @@ function AdminPanel({ t, isAr, products, settings, onSaveProducts, onSaveSetting
 
 function ProductEditor({ product, categories, onCancel, onSave }) {
   const [form, setForm] = useState(
-    product || { id: "p" + Date.now(), sku: "", brand: "Dreamy Finds", category: categories[0].en, nameEn: "", nameAr: "", price: 0, sale: null, stock: 0, featured: false, bestSeller: false, isNew: false, desc: "", specs: "" }
+    product || { id: "p" + Date.now(), sku: "", brand: "Dreamy Finds", category: categories[0].en, nameEn: "", nameAr: "", price: 0, sale: null, stock: 0, featured: false, bestSeller: false, isNew: false, desc: "", specs: "", image: "" }
   );
   function u(k, v) { setForm((f) => ({ ...f, [k]: v })); }
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onCancel}>
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 body-font" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-bold text-lg mb-4">{product ? "Edit Product" : "Add Product"}</h3>
+
+        <div className="mb-4">
+          <label className="text-xs font-semibold text-[#B98A90] mb-1 block">Product Photo</label>
+          <div className="flex items-center gap-3">
+            <img src={form.image || img(form.sku || "placeholder")} alt="" className="w-16 h-16 rounded-lg object-cover bg-[#FBEFEA] border" />
+            <div className="flex-1">
+              <input value={form.image || ""} onChange={(e) => u("image", e.target.value)} placeholder="Paste an image link (https://...)" className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <p className="text-[11px] text-neutral-400 mt-1">Upload your photo to a free image host (e.g. imgur.com) and paste the direct image link here. Leave blank to use a placeholder.</p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Name (EN)" value={form.nameEn} onChange={(v) => u("nameEn", v)} />
           <Field label="Name (AR)" value={form.nameAr} onChange={(v) => u("nameAr", v)} />
